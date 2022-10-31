@@ -49,7 +49,9 @@ class W1(QWidget):
             table += f"""\n{names[name]} REAL NOT NULL,"""
         table += f"""{names[-1]} REAL NOT NULL\n);"""
         self.db_cur.execute(table)
+        self.db_con.commit()
         self.add_data(data, num)
+        self.display_data(new_table)
         self.db_con.commit()
 
     def add_data(self, data='', num=0):
@@ -59,17 +61,22 @@ class W1(QWidget):
         lines = open(data, mode="r", encoding="UTF-8").readlines()
         values = [[float(j) for j in i.split()] for i in lines[1::]]
         names = lines[0].split()
-        names.extend(values[0])
-        names = tuple(names)
-        for row in range(len(values)):
-            pass
+        add_data_request = f"""INSERT INTO {table}("""
+        for i in range(len(names) - 1):
+            add_data_request += f"""{names[i]}, """
+        add_data_request += f"""{names[-1]}) VALUES({', '.join(('? ' * len(names)).split())})"""
+        print(add_data_request)
+        for i in range(len(values)):
+            self.db_cur.execute(add_data_request, tuple(values[i]))
+        self.db_con.commit()
 
-    def display_data(self):
+    def display_data(self, name):
+        print(name)
         db = QSqlDatabase.addDatabase('QSQLITE')
         db.setDatabaseName('CansatApp.db')
         db.open()
         model = QSqlTableModel(self, db)
-        model.setTable('First_flight')
+        model.setTable(name)
         model.select()
         self.dbView.setModel(model)
 
