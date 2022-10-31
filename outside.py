@@ -1,16 +1,16 @@
 import sqlite3
 import sys
 from PyQt5 import uic
-from PyQt5.QtWidgets import QApplication, QFileDialog, QTableWidgetItem
-from PyQt5.QtWidgets import QMainWindow, QWidget
+from PyQt5.QtWidgets import QApplication, QFileDialog, QTableWidgetItem, QMainWindow, QWidget, QInputDialog
+from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self):  # Инициализация главного окна
         super().__init__()
         self.W1 = W1()
         self.W2 = W2()
-        uic.loadUi('Wm.ui', self)
+        uic.loadUi('Wm.ui', self)  #
         self.w1Button.clicked.connect(self.open_w1)
         self.w2Button.clicked.connect(self.open_w2)
 
@@ -25,29 +25,53 @@ class W1(QWidget):
     def __init__(self):
         super().__init__()
         uic.loadUi('W1.ui', self)
+        self.flight_num = int()
         self.data_file = str()
         self.format = str()
         self.column = int()
         self.data = None
-        self.cur = None
         self.db_con = sqlite3.connect("CansatApp.db")
-        self.addButton.clicked.connect(self.add_data)
+        self.db_cur = self.db_con.cursor()
+        self.addButton.clicked.connect(self.add_table)
+        self.modButton.clicked.connect(self.add_data)
 
-    def add_data(self):
-        self.data_file = QFileDialog.getOpenFileName(self)
-        self.data = [[float(j) for j in i.split()] for i in
-                     open(self.data_file[0], mode="r", encoding="UTF-8").readlines()]
-        self.cur = self.db_con.cursor()
-        for row in range(len(self.data)):
-            self.cur.execute("INSERT INTO First_flight(Package, Time, Ax, Ay, Az, Temperature, Altitude, Pressure)"
-                             "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                             (row, self.data[row][1], self.data[row][2], self.data[row][3], self.data[row][4],
-                              self.data[row][4], self.data[row][6], self.data[row][7]))
-            self.db_con.commit()
-        self.display_data(self.data)
+    def receive_data(self):
+        data_file = QFileDialog.getOpenFileName(self)
+        flight_num = QInputDialog.getInt(self, "Номер полёта", "Выберите номер полёта?")
+        return data_file[0], flight_num[0]
 
-    def display_data(self, table, rows=12):
-        pass
+    def add_table(self):
+        data, num = self.receive_data()
+        names = open(data, mode="r", encoding="UTF-8").readlines()[0].split()
+        new_table = f"Flight{num}"
+        table = f"""CREATE TABLE IF NOT EXISTS {new_table} ( \nPackets INTEGER PRIMARY KEY,"""
+        for name in range(1, len(names) - 1):
+            table += f"""\n{names[name]} REAL NOT NULL,"""
+        table += f"""{names[-1]} REAL NOT NULL\n);"""
+        self.db_cur.execute(table)
+        self.add_data(data, num)
+        self.db_con.commit()
+
+    def add_data(self, data='', num=0):
+        if data == 0 and num == 0:
+            data, num = self.receive_data()
+        table = f"Flight{num}"
+        lines = open(data, mode="r", encoding="UTF-8").readlines()
+        values = [[float(j) for j in i.split()] for i in lines[1::]]
+        names = lines[0].split()
+        names.extend(values[0])
+        names = tuple(names)
+        for row in range(len(values)):
+            pass
+
+    def display_data(self):
+        db = QSqlDatabase.addDatabase('QSQLITE')
+        db.setDatabaseName('CansatApp.db')
+        db.open()
+        model = QSqlTableModel(self, db)
+        model.setTable('First_flight')
+        model.select()
+        self.dbView.setModel(model)
 
     def closeEvent(self, event):
         pass
@@ -57,3 +81,9 @@ class W2(QWidget):
     def __init__(self):
         super().__init__()
         uic.loadUi('W2.ui', self)
+        self.db_con = sqlite3.connect("CansatApp.db")
+        self.graphButton.clicked.connect(self.build_graph)
+        self.db = None
+
+    def build_graph(self):
+        self.db = QInputDialog.getInt(self, "Выбор величины", "По какому столбцу строим график?", 1, 3, 7)
