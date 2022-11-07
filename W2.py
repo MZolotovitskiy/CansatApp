@@ -46,8 +46,8 @@ class Table(QDialog):
         uic.loadUi('Table.ui', self)
         self.widget = widget
         self.ax = None
-        self.axx = 1
-        self.axy = 1
+        self.axx = 0
+        self.axy = 0
         self.display_data(name)
         self.dbView.selectionModel().selectionChanged.connect(self.choose_ax)
         self.chsxButton.clicked.connect(self.save_axx)
