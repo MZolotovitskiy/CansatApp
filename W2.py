@@ -2,21 +2,27 @@ import sqlite3
 import sys
 import numpy as np
 import pyqtgraph as pg
-from PyQt5 import uic
+
+from PyQt5 import uic, QtGui, QtCore
 from PyQt5.QtWidgets import QApplication, QFileDialog, QTableWidgetItem, QMainWindow, QWidget, QInputDialog, QDialog, \
-    QSpinBox, QDialog
+    QSpinBox, QDialog, QColorDialog
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
+from PyQt5.QtCore import QSize
 
 
 class W2(QWidget):
     def __init__(self):
         super().__init__()
+        self.symbol = None
+        self.color = (255, 255, 255)
         uic.loadUi('W2.ui', self)
         self.db_con = sqlite3.connect("CansatApp.db")
         self.db_cur = self.db_con.cursor()
         self.tableButton.clicked.connect(self.open_table)
-        self.table = None
         self.plotButton.clicked.connect(self.build_plot)
+        self.clearButton.clicked.connect(self.clear_plot)
+        self.colorButton.clicked.connect(self.choose_color)
+        self.symbolButton.clicked.connect(self.choose_symbol)
 
     def open_table(self):
         self.name = f"FLight{self.tableBox.value()}"
@@ -24,20 +30,37 @@ class W2(QWidget):
         self.table.show()
         self.table.exec()
         self.axx, self.axy = self.table.display_axis()
-        self.table_info = self.db_cur.execute(f"""PRAGMA table_info(
+        self.table_inf = self.db_cur.execute(f"""PRAGMA table_info(
               {self.name}
               );""").fetchall()
-        self.yEdit.setText(self.table_info[self.axy][1])
-        self.xEdit.setText(self.table_info[self.axx][1])
+        self.yEdit.setText(self.table_inf[self.axy][1])
+        self.xEdit.setText(self.table_inf[self.axx][1])
 
     def build_plot(self):
-        self.x_coordsa = self.db_cur.execute(f"""SELECT {self.table_info[self.axx][1]} FROM {self.name}""").fetchall()
-        self.y_coordsa = self.db_cur.execute(f"""SELECT {self.table_info[self.axy][1]} FROM {self.name}""").fetchall()
+        self.x_coordsa = self.db_cur.execute(f"""SELECT {self.table_inf[self.axx][1]} FROM {self.name}""").fetchall()
+        self.y_coordsa = self.db_cur.execute(f"""SELECT {self.table_inf[self.axy][1]} FROM {self.name}""").fetchall()
         self.x_coords, self.y_coords = [], []
         for i in range(len(self.x_coordsa)):
             self.x_coords.extend(self.x_coordsa[i])
             self.y_coords.extend(self.y_coordsa[i])
-        self.plotView.plot(self.x_coords, self.y_coords)
+        self.plotView.showGrid(x=True, y=True)
+        pen = pg.mkPen(color=self.color, width=1, style=QtCore.Qt.DashLine)
+        if self.symbol:
+            self.plotView.plot(self.x_coords, self.y_coords, symbol=self.symbol, pen=pen)
+        else:
+            self.plotView.plot(self.x_coords, self.y_coords, pen=pen)
+
+    def clear_plot(self):
+        self.plotView.clear()
+
+    def choose_color(self):
+        self.color = QColorDialog.getColor()
+
+    def choose_symbol(self):
+        self.symboldialog = SymbolDialog(self)
+        self.symboldialog.show()
+        self.symboldialog.exec()
+        self.symbol = self.symboldialog.return_data()
 
 
 class Table(QDialog):
@@ -48,19 +71,20 @@ class Table(QDialog):
         self.ax = None
         self.axx = 0
         self.axy = 0
-        self.display_data(name)
-        self.dbView.selectionModel().selectionChanged.connect(self.choose_ax)
         self.chsxButton.clicked.connect(self.save_axx)
         self.chsyButton.clicked.connect(self.save_axy)
+        self.db = QSqlDatabase.addDatabase('QSQLITE')
+        self.db.setDatabaseName('CansatApp.db')
+        self.db.open()
+        self.model = QSqlTableModel(self, self.db)
+        self.model.setTable(name)
+        self.model.select()
+        self.display_data()
+        self.dbView.selectionModel().selectionChanged.connect(self.choose_ax)
+        self.closeButton.clicked.connect(self.accept_data)
 
-    def display_data(self, name):
-        db = QSqlDatabase.addDatabase('QSQLITE')
-        db.setDatabaseName('CansatApp.db')
-        db.open()
-        model = QSqlTableModel(self, db)
-        model.setTable(name)
-        model.select()
-        self.dbView.setModel(model)
+    def display_data(self):
+        self.dbView.setModel(self.model)
 
     def choose_ax(self, selected):
         self.ax = selected.indexes()[0].column()
@@ -73,3 +97,26 @@ class Table(QDialog):
 
     def display_axis(self):
         return self.axx, self.axy
+
+    def accept_data(self):
+        self.close()
+
+
+class SymbolDialog(QDialog):
+    def __init__(self, widget):
+        super().__init__()
+        uic.loadUi('Symbol.ui', self)
+        self.widget = widget
+        self.buttonBox.accepted.connect(self.accept_data)
+        self.buttonBox.rejected.connect(self.reject_data)
+
+    def accept_data(self):
+        self.symbol = self.symbolEdit.text()
+        self.close()
+
+    def reject_data(self):
+        self.symbol = None
+        self.close()
+
+    def return_data(self):
+        return self.symbol
