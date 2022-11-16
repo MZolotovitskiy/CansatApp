@@ -1,13 +1,9 @@
 import sqlite3
-import sys
-import numpy as np
 import pyqtgraph as pg
 
-from PyQt5 import uic, QtGui, QtCore
-from PyQt5.QtWidgets import QApplication, QFileDialog, QTableWidgetItem, QMainWindow, QWidget, QInputDialog, QDialog, \
-    QSpinBox, QDialog, QColorDialog
+from PyQt5 import uic, QtCore
+from PyQt5.QtWidgets import QWidget, QDialog, QColorDialog
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
-from PyQt5.QtCore import QSize
 
 
 class W2(QWidget):
@@ -15,9 +11,22 @@ class W2(QWidget):
         super().__init__()
         self.symbol = None
         self.color = (255, 255, 255)
+        self.name = None
+        self.table = None
+        self.axx = None
+        self.axy = None
+        self.table_inf = None
+        self.x_coords = None
+        self.x_coordsa = None
+        self.y_coords = None
+        self.y_coordsa = None
+        self.symboldialog = None
         uic.loadUi('W2.ui', self)
         self.db_con = sqlite3.connect("CansatApp.db")
         self.db_cur = self.db_con.cursor()
+        self.db = QSqlDatabase.addDatabase('QSQLITE', 'w2')
+        self.db.setDatabaseName('CansatApp.db')
+        self.db.open()
         self.tableButton.clicked.connect(self.open_table)
         self.plotButton.clicked.connect(self.build_plot)
         self.clearButton.clicked.connect(self.clear_plot)
@@ -26,7 +35,7 @@ class W2(QWidget):
 
     def open_table(self):
         self.name = f"FLight{self.tableBox.value()}"
-        self.table = Table(self.name, self)
+        self.table = Table(self.name, self, self.db)
         self.table.show()
         self.table.exec()
         self.axx, self.axy = self.table.display_axis()
@@ -37,8 +46,10 @@ class W2(QWidget):
         self.xEdit.setText(self.table_inf[self.axx][1])
 
     def build_plot(self):
-        self.x_coordsa = self.db_cur.execute(f"""SELECT {self.table_inf[self.axx][1]} FROM {self.name}""").fetchall()
-        self.y_coordsa = self.db_cur.execute(f"""SELECT {self.table_inf[self.axy][1]} FROM {self.name}""").fetchall()
+        self.x_coordsa = self.db_cur.execute(
+            f"""SELECT {self.table_inf[self.axx][1]} FROM {self.name}""").fetchall()
+        self.y_coordsa = self.db_cur.execute(
+            f"""SELECT {self.table_inf[self.axy][1]} FROM {self.name}""").fetchall()
         self.x_coords, self.y_coords = [], []
         for i in range(len(self.x_coordsa)):
             self.x_coords.extend(self.x_coordsa[i])
@@ -64,18 +75,16 @@ class W2(QWidget):
 
 
 class Table(QDialog):
-    def __init__(self, name, widget):
+    def __init__(self, name, widget, db):
         super().__init__()
         uic.loadUi('Table.ui', self)
         self.widget = widget
         self.ax = None
         self.axx = 0
         self.axy = 0
+        self.db = db
         self.chsxButton.clicked.connect(self.save_axx)
         self.chsyButton.clicked.connect(self.save_axy)
-        self.db = QSqlDatabase.addDatabase('QSQLITE')
-        self.db.setDatabaseName('CansatApp.db')
-        self.db.open()
         self.model = QSqlTableModel(self, self.db)
         self.model.setTable(name)
         self.model.select()
@@ -107,6 +116,7 @@ class SymbolDialog(QDialog):
         super().__init__()
         uic.loadUi('Symbol.ui', self)
         self.widget = widget
+        self.symbol = None
         self.buttonBox.accepted.connect(self.accept_data)
         self.buttonBox.rejected.connect(self.reject_data)
 
